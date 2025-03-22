@@ -1,19 +1,21 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import DonationForm from "@/components/DonationForm";
 import PaymentInfoSection from "@/components/PaymentInfoSection";
 import SubmissionModal from "@/components/SubmissionModal";
 
-export default function FormPage() {
+interface FormPageProps {
+  onLogout: () => void;
+}
+
+export default function FormPage({ onLogout }: FormPageProps) {
   const [, setLocation] = useLocation();
-  const { logout, user } = useAuth();
   const [showSubmissionModal, setShowSubmissionModal] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState("");
 
   const handleLogout = () => {
-    logout();
+    onLogout();
     setLocation("/");
   };
 

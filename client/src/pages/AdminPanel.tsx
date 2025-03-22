@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import UserListTab from "@/components/UserListTab";
 import RegisterUserTab from "@/components/RegisterUserTab";
@@ -8,13 +7,16 @@ import AdminHeader from "@/components/AdminHeader";
 
 type TabType = "users" | "register";
 
-export default function AdminPanel() {
+interface AdminPanelProps {
+  onLogout: () => void;
+}
+
+export default function AdminPanel({ onLogout }: AdminPanelProps) {
   const [, setLocation] = useLocation();
-  const { logout } = useAuth();
   const [activeTab, setActiveTab] = useState<TabType>("users");
 
   const handleLogout = () => {
-    logout();
+    onLogout();
     setLocation("/");
   };
 
