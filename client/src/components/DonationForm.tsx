@@ -7,7 +7,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { convertToWords } from "@/lib/numberToWords";
 import { generatePdf } from "@/lib/pdfGenerator";
-import { sendEmail } from "@/lib/emailService";
+import emailjs from '@emailjs/browser'; // Import EmailJS library
 
 import {
   Form,
@@ -54,7 +54,7 @@ interface DonationFormProps {
 export default function DonationForm({ onSubmissionSuccess }: DonationFormProps) {
   const { toast } = useToast();
   const [showInstrumentFields, setShowInstrumentFields] = useState(false);
-  
+
   // Fetch the next receipt number
   const { data: receiptData, isLoading: isLoadingReceipt } = useQuery({
     queryKey: ['/api/next-receipt-number'],
@@ -103,7 +103,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
         setShowInstrumentFields(mode === "dd" || mode === "cheque");
       }
     });
-    
+
     return () => subscription.unsubscribe();
   }, [form]);
 
@@ -117,16 +117,16 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
       try {
         // Generate PDF
         const pdfBlob = await generatePdf(variables);
-        
+
         // Send email with PDF
         await sendEmail(variables.email, pdfBlob);
-        
+
         // Show success message
         toast({
           title: "Success!",
           description: "Receipt has been generated and sent to the donor's email.",
         });
-        
+
         // Reset form except for the receipt number field (which should be auto-incremented)
         form.reset({
           ...form.getValues(),
@@ -143,7 +143,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
           drawnOn: "",
           instrumentNumber: "",
         });
-        
+
         // Notify parent component of successful submission
         onSubmissionSuccess(variables.email);
       } catch (error) {
@@ -184,7 +184,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="date"
@@ -199,7 +199,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
             )}
           />
         </div>
-        
+
         <FormField
           control={form.control}
           name="donorName"
@@ -213,7 +213,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
             </FormItem>
           )}
         />
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
             control={form.control}
@@ -228,7 +228,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="email"
@@ -243,7 +243,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
             )}
           />
         </div>
-        
+
         <FormField
           control={form.control}
           name="address"
@@ -257,7 +257,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
             </FormItem>
           )}
         />
-        
+
         <FormField
           control={form.control}
           name="panNumber"
@@ -271,7 +271,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
             </FormItem>
           )}
         />
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
             control={form.control}
@@ -299,7 +299,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="purpose"
@@ -314,7 +314,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
             )}
           />
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
             control={form.control}
@@ -341,7 +341,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
               </FormItem>
             )}
           />
-          
+
           <FormField
             control={form.control}
             name="amountInWords"
@@ -361,7 +361,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
             )}
           />
         </div>
-        
+
         {showInstrumentFields && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <FormField
@@ -377,7 +377,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
                 </FormItem>
               )}
             />
-            
+
             <FormField
               control={form.control}
               name="drawnOn"
@@ -391,7 +391,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
                 </FormItem>
               )}
             />
-            
+
             <FormField
               control={form.control}
               name="instrumentNumber"
@@ -407,7 +407,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
             />
           </div>
         )}
-        
+
         <div className="pt-4">
           <Button 
             type="submit" 
@@ -420,3 +420,25 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
     </Form>
   );
 }
+
+const sendEmail = async (email: string, pdfBlob: Blob) => {
+    // Initialize EmailJS with your public key
+    emailjs.init("YOUR_PUBLIC_KEY"); // Replace with your actual EmailJS public key
+
+    // EmailJS send function.  You'll need to adapt this to your specific EmailJS template and service ID.
+    try {
+        await emailjs.send(
+            'YOUR_SERVICE_ID', // Replace with your EmailJS service ID
+            'YOUR_TEMPLATE_ID', // Replace with your EmailJS template ID
+            {
+                to_email: email,
+                receipt: pdfBlob, // Assuming you've handled the pdfBlob appropriately for EmailJS
+            },
+            'YOUR_USER_ID' //Replace with your EmailJS user ID
+        );
+
+    } catch (error) {
+        console.error("Failed to send email:", error);
+        throw error; // Re-throw the error to be handled by the calling function.
+    }
+};
