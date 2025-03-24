@@ -45,7 +45,7 @@ export default function DonorListTab() {
   // Filter donations based on selected donor and search query
   const filteredDonations = useMemo(() => {
     return donations.filter((donation) => {
-      const matchesDonor = selectedDonor ? donation.donorName === selectedDonor : true;
+      const matchesDonor = selectedDonor === 'all' || !selectedDonor ? true : donation.donorName === selectedDonor;
       const matchesSearch = searchQuery
         ? Object.values(donation).some(
             value => 
@@ -114,7 +114,7 @@ export default function DonorListTab() {
               <SelectValue placeholder="Filter by donor name" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Donors</SelectItem>
+              <SelectItem value="all">All Donors</SelectItem>
               {uniqueDonors.map((donor) => (
                 <SelectItem key={donor} value={donor}>
                   {donor}
