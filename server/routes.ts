@@ -80,6 +80,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch("/api/users/:id/status", async (req: Request, res: Response) => {
+    try {
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) {
+        return res.status(400).json({ message: "Invalid user ID" });
+      }
+
+      const { isActive } = req.body;
+      if (typeof isActive !== 'boolean') {
+        return res.status(400).json({ message: "isActive must be a boolean value" });
+      }
+      
+      const user = await storage.getUser(id);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const updatedUser = await storage.updateUserStatus(id, isActive);
+      return res.status(200).json({
+        id: updatedUser!.id,
+        username: updatedUser!.username,
+        fullName: updatedUser!.fullName,
+        role: updatedUser!.role,
+        isActive: updatedUser!.isActive,
+        createdAt: updatedUser!.createdAt
+      });
+    } catch (error) {
+      return res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   app.delete("/api/users/:id", async (req: Request, res: Response) => {
     try {
       const id = parseInt(req.params.id);

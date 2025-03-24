@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Switch } from "@/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -14,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search } from "lucide-react";
+import { Search, CheckCircle, XCircle } from "lucide-react";
 
 export default function UserListTab() {
   const { toast } = useToast();
@@ -52,6 +53,47 @@ export default function UserListTab() {
       });
     },
   });
+  
+  // Toggle user active status mutation
+  const toggleUserStatusMutation = useMutation({
+    mutationFn: async ({ userId, isActive }: { userId: number; isActive: boolean }) => {
+      return await apiRequest("PATCH", `/api/users/${userId}/status`, { isActive });
+    },
+    onSuccess: (data: User) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      
+      const statusText = data.isActive ? "activated" : "deactivated";
+      toast({
+        title: `User ${statusText}`,
+        description: `${data.fullName} has been ${statusText} successfully.`,
+      });
+      
+      // If user is deactivated, we'll show a message about them being logged out
+      if (!data.isActive) {
+        toast({
+          title: "User logged out",
+          description: "The user will be automatically logged out on their next request.",
+          variant: "default",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update user status",
+      });
+    },
+  });
+  
+  const handleToggleStatus = (userId: number, currentStatus: boolean) => {
+    const newStatus = !currentStatus;
+    const action = newStatus ? "activate" : "deactivate";
+    
+    if (window.confirm(`Are you sure you want to ${action} this user?${!newStatus ? " This will log them out immediately." : ""}`)) {
+      toggleUserStatusMutation.mutate({ userId, isActive: newStatus });
+    }
+  };
   
   const handleDeleteUser = (userId: number) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
@@ -142,17 +184,39 @@ export default function UserListTab() {
                     </span>
                   </TableCell>
                   <TableCell>
-                    <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
-                      Active
-                    </span>
+                    <div className="flex items-center space-x-2">
+                      <Switch
+                        checked={user.isActive}
+                        onCheckedChange={() => handleToggleStatus(user.id, user.isActive)}
+                        disabled={toggleUserStatusMutation.isPending}
+                      />
+                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        user.isActive 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-red-100 text-red-800'
+                      }`}>
+                        {user.isActive ? (
+                          <span className="flex items-center">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="flex items-center">
+                            <XCircle className="w-3 h-3 mr-1" />
+                            Inactive
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <Button 
                       variant="ghost" 
-                      className="text-primary hover:text-primary-dark mr-2"
-                      disabled={true} // Edit functionality would be implemented in a real app
+                      className={`${user.isActive ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'} mr-2`}
+                      onClick={() => handleToggleStatus(user.id, user.isActive)}
+                      disabled={toggleUserStatusMutation.isPending}
                     >
-                      Edit
+                      {user.isActive ? 'Deactivate' : 'Activate'}
                     </Button>
                     <Button 
                       variant="ghost" 

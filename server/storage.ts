@@ -13,6 +13,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
+  updateUserStatus(id: number, isActive: boolean): Promise<User | undefined>;
   deleteUser(id: number): Promise<void>;
   
   // Donation operations
@@ -70,6 +71,18 @@ export class MemStorage implements IStorage {
 
   async getUsers(): Promise<User[]> {
     return Array.from(this.users.values());
+  }
+
+  async updateUserStatus(id: number, isActive: boolean): Promise<User | undefined> {
+    const user = this.users.get(id);
+    
+    if (!user) {
+      return undefined;
+    }
+    
+    const updatedUser = { ...user, isActive };
+    this.users.set(id, updatedUser);
+    return updatedUser;
   }
 
   async deleteUser(id: number): Promise<void> {
