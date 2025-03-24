@@ -143,16 +143,20 @@ export default function DonorListTab() {
               <TableHead>Donor Name</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Amount</TableHead>
-              <TableHead>Payment Mode</TableHead>
-              <TableHead>Contact</TableHead>
-              <TableHead>Email</TableHead>
+              <TableHead>Address</TableHead>
+              <TableHead>PAN No.</TableHead>
+              <TableHead>Mode of Payment</TableHead>
+              <TableHead>Cheque/D.D./Txn No.</TableHead>
+              <TableHead>Cheque/D.D./Txn Date</TableHead>
+              <TableHead>Drawn On</TableHead>
+              <TableHead>Purpose</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               Array(5).fill(0).map((_, index) => (
                 <TableRow key={index}>
-                  {Array(7).fill(0).map((_, cellIndex) => (
+                  {Array(11).fill(0).map((_, cellIndex) => (
                     <TableCell key={cellIndex}>
                       <Skeleton className="h-6 w-full" />
                     </TableCell>
@@ -166,9 +170,13 @@ export default function DonorListTab() {
                   <TableCell>{donation.donorName}</TableCell>
                   <TableCell>{donation.date}</TableCell>
                   <TableCell>₹{donation.amount.toLocaleString()}</TableCell>
+                  <TableCell>{donation.address}</TableCell>
+                  <TableCell>{donation.panNumber}</TableCell>
                   <TableCell>{donation.paymentMode}</TableCell>
-                  <TableCell>{donation.contactNumber}</TableCell>
-                  <TableCell>{donation.email}</TableCell>
+                  <TableCell>{donation.instrumentNumber || '-'}</TableCell>
+                  <TableCell>{donation.instrumentDate || '-'}</TableCell>
+                  <TableCell>{donation.drawnOn || '-'}</TableCell>
+                  <TableCell>{donation.purpose}</TableCell>
                 </TableRow>
               ))
             ) : (
