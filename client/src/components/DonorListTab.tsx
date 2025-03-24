@@ -71,7 +71,8 @@ export default function DonorListTab() {
       'Amount': donation.amount,
       'Amount in Words': donation.amountInWords,
       'Payment Mode': donation.paymentMode,
-      'Bank Name': donation.bankName || 'N/A',
+      'Purpose': donation.purpose,
+      'Bank/Drawn On': donation.drawnOn || 'N/A',
       'Instrument Date': donation.instrumentDate || 'N/A',
       'Instrument Number': donation.instrumentNumber || 'N/A',
     }));
