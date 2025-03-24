@@ -57,7 +57,9 @@ export default function UserListTab() {
   // Toggle user active status mutation
   const toggleUserStatusMutation = useMutation({
     mutationFn: async ({ userId, isActive }: { userId: number; isActive: boolean }) => {
-      return await apiRequest("PATCH", `/api/users/${userId}/status`, { isActive });
+      const response = await apiRequest("PATCH", `/api/users/${userId}/status`, { isActive });
+      const data = await response.json();
+      return data as User;
     },
     onSuccess: (data: User) => {
       queryClient.invalidateQueries({ queryKey: ['/api/users'] });

@@ -63,7 +63,9 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id, 
       isActive: true,
-      createdAt: now
+      createdAt: now,
+      // Ensure role is set with a default if not provided
+      role: insertUser.role || "staff"
     };
     this.users.set(id, user);
     return user;
@@ -93,10 +95,16 @@ export class MemStorage implements IStorage {
   async createDonation(insertDonation: InsertDonation): Promise<Donation> {
     const id = this.donationCurrentId++;
     const now = new Date();
+    
+    // Ensure all optional fields are properly typed as null if not provided
     const donation: Donation = {
       ...insertDonation,
       id,
-      createdAt: now
+      createdAt: now,
+      // Set optional fields to null if they're undefined
+      drawnOn: insertDonation.drawnOn || null,
+      instrumentDate: insertDonation.instrumentDate || null,
+      instrumentNumber: insertDonation.instrumentNumber || null
     };
     this.donations.set(id, donation);
     return donation;
