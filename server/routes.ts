@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
@@ -26,9 +26,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fullName: user.fullName,
         role: user.role
       });
-    } catch (error) {
-      if (error instanceof Error) {
-        return res.status(400).json({ message: error.message });
+    } catch (error: unknown) {
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
+        return res.status(400).json({ message: validationError.message });
       }
       return res.status(500).json({ message: "Internal server error" });
     }
@@ -48,7 +49,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           createdAt: user.createdAt
         }))
       );
-    } catch (error) {
+    } catch (error: unknown) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -73,8 +74,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         createdAt: user.createdAt
       });
     } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'ZodError') {
-        const validationError = fromZodError(error as any);
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
         return res.status(400).json({ message: validationError.message });
       }
       return res.status(500).json({ message: "Internal server error" });
@@ -107,7 +108,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: updatedUser!.isActive,
         createdAt: updatedUser!.createdAt
       });
-    } catch (error) {
+    } catch (error: unknown) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -126,7 +127,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       await storage.deleteUser(id);
       return res.status(200).json({ message: "User deleted successfully" });
-    } catch (error) {
+    } catch (error: unknown) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -138,8 +139,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const donation = await storage.createDonation(newDonation);
       return res.status(201).json(donation);
     } catch (error: unknown) {
-      if (error instanceof Error && error.name === 'ZodError') {
-        const validationError = fromZodError(error as any);
+      if (error instanceof ZodError) {
+        const validationError = fromZodError(error);
         return res.status(400).json({ message: validationError.message });
       }
       return res.status(500).json({ message: "Internal server error" });
@@ -150,7 +151,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const donations = await storage.getDonations();
       return res.status(200).json(donations);
-    } catch (error) {
+    } catch (error: unknown) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
@@ -175,7 +176,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       return res.status(200).json({ receiptNumber: nextNumber });
-    } catch (error) {
+    } catch (error: unknown) {
       return res.status(500).json({ message: "Internal server error" });
     }
   });
