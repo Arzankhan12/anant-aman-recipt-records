@@ -7,6 +7,7 @@ import {
   insertDonationSchema 
 } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
+import { ZodError } from "zod";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Authentication routes
@@ -71,9 +72,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         isActive: user.isActive,
         createdAt: user.createdAt
       });
-    } catch (error) {
-      if (error.name === 'ZodError') {
-        const validationError = fromZodError(error);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'ZodError') {
+        const validationError = fromZodError(error as any);
         return res.status(400).json({ message: validationError.message });
       }
       return res.status(500).json({ message: "Internal server error" });
@@ -136,9 +137,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const newDonation = insertDonationSchema.parse(req.body);
       const donation = await storage.createDonation(newDonation);
       return res.status(201).json(donation);
-    } catch (error) {
-      if (error.name === 'ZodError') {
-        const validationError = fromZodError(error);
+    } catch (error: unknown) {
+      if (error instanceof Error && error.name === 'ZodError') {
+        const validationError = fromZodError(error as any);
         return res.status(400).json({ message: validationError.message });
       }
       return res.status(500).json({ message: "Internal server error" });
