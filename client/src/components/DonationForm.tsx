@@ -7,7 +7,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { convertToWords } from "@/lib/numberToWords";
 import { generatePdf } from "@/lib/pdfGenerator";
-import emailjs from '@emailjs/browser'; // Import EmailJS library
+import { sendEmail as sendEmailService } from "../lib/emailService"; // Import with alias to avoid conflict
 
 import {
   Form,
@@ -56,8 +56,15 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
   const [showInstrumentFields, setShowInstrumentFields] = useState(false);
 
   // Fetch the next receipt number
-  const { data: receiptData, isLoading: isLoadingReceipt } = useQuery({
+  const { data: receiptData, isLoading: isLoadingReceipt, refetch: refetchReceiptNumber } = useQuery<{ receiptNumber: string }>({
     queryKey: ['/api/next-receipt-number'],
+    queryFn: async (): Promise<{ receiptNumber: string }> => {
+      const response = await fetch('/api/next-receipt-number');
+      if (!response.ok) {
+        throw new Error('Failed to fetch receipt number');
+      }
+      return response.json();
+    }
   });
 
   const form = useForm<FormValues>({
@@ -144,6 +151,9 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
           instrumentNumber: "",
         });
 
+        // Refetch the receipt number to get the next one
+        refetchReceiptNumber();
+
         // Notify parent component of successful submission
         onSubmissionSuccess(variables.email);
       } catch (error) {
@@ -204,15 +214,15 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
           control={form.control}
           name="donorName"
           render={({ field }) => (
-            <FormItem>
-              <FormLabel>Donor Name</FormLabel>
-              <FormControl>
-                <Input {...field} placeholder="Enter donor's full name" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+              <FormItem>
+                <FormLabel>Donor Name</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Enter donor's full name" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
@@ -422,21 +432,9 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
 }
 
 const sendEmail = async (email: string, pdfBlob: Blob) => {
-    // Initialize EmailJS with your public key
-    emailjs.init("YOUR_PUBLIC_KEY"); // Replace with your actual EmailJS public key
-
-    // EmailJS send function.  You'll need to adapt this to your specific EmailJS template and service ID.
     try {
-        await emailjs.send(
-            'YOUR_SERVICE_ID', // Replace with your EmailJS service ID
-            'YOUR_TEMPLATE_ID', // Replace with your EmailJS template ID
-            {
-                to_email: email,
-                receipt: pdfBlob, // Assuming you've handled the pdfBlob appropriately for EmailJS
-            },
-            'YOUR_USER_ID' //Replace with your EmailJS user ID
-        );
-
+        // Use our updated email service that uses Nodemailer on the server
+        await sendEmailService(email, pdfBlob);
     } catch (error) {
         console.error("Failed to send email:", error);
         throw error; // Re-throw the error to be handled by the calling function.

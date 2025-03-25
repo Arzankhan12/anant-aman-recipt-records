@@ -4,6 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle } from "lucide-react";
@@ -17,12 +18,15 @@ interface SubmissionModalProps {
 export default function SubmissionModal({ isOpen, onClose, email }: SubmissionModalProps) {
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby="submission-success-description">
         <DialogHeader className="text-center">
           <div className="flex justify-center mb-4">
             <CheckCircle className="h-12 w-12 text-green-500" />
           </div>
           <DialogTitle className="text-xl">Form Submitted Successfully!</DialogTitle>
+          <DialogDescription id="submission-success-description" className="sr-only">
+            Form submission success notification dialog
+          </DialogDescription>
         </DialogHeader>
         <div className="text-center py-4">
           <p className="text-gray-600">

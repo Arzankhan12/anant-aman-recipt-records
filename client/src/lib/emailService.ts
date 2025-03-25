@@ -6,44 +6,46 @@ const EMAIL_JS_SERVICE_ID = import.meta.env.VITE_EMAIL_JS_SERVICE_ID || "default
 const EMAIL_JS_TEMPLATE_ID = import.meta.env.VITE_EMAIL_JS_TEMPLATE_ID || "template_default";
 const EMAIL_JS_USER_ID = import.meta.env.VITE_EMAIL_JS_USER_ID || "user_default";
 
+// Email service using server-side Nodemailer instead of EmailJS
+// This client-side service will make API calls to the server's Nodemailer implementation
+
 export async function sendEmail(toEmail: string, pdfBlob: Blob): Promise<void> {
   try {
-    // For demonstration purposes, we'll log the email that would be sent
-    // In a real implementation, we'd upload the PDF and send it via EmailJS
-    console.log(`Email would be sent to ${toEmail} with the receipt PDF attached`);
+    // Convert PDF blob to base64
+    const base64data = await blobToBase64(pdfBlob);
     
-    // In a real implementation with EmailJS:
-    // 1. Convert PDF blob to base64
-    const reader = new FileReader();
-    reader.readAsDataURL(pdfBlob);
-    
-    return new Promise((resolve, reject) => {
-      reader.onloadend = function() {
-        const base64data = reader.result;
-        
-        // 2. Send email with PDF attachment
-        emailjs.send(
-          EMAIL_JS_SERVICE_ID,
-          EMAIL_JS_TEMPLATE_ID,
-          {
-            to_email: toEmail,
-            message: "Thank you for your donation. Please find your receipt attached.",
-            attachment: base64data,
-          },
-          EMAIL_JS_USER_ID
-        )
-        .then((response) => {
-          console.log("Email sent successfully:", response);
-          resolve();
-        })
-        .catch((error) => {
-          console.error("Email sending failed:", error);
-          reject(error);
-        });
-      };
+    // Call the server API to send email
+    const response = await fetch('/api/send-email', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        to: toEmail,
+        subject: 'Your Donation Receipt',
+        text: 'Thank you for your donation. Please find your receipt attached.',
+        pdfBase64: base64data,
+      }),
     });
+    
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.message || 'Failed to send email');
+    }
+    
+    console.log('Email sent successfully');
   } catch (error) {
-    console.error("Error in sendEmail:", error);
+    console.error('Error in sendEmail:', error);
     throw error;
   }
+}
+
+// Helper function to convert Blob to base64
+function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }

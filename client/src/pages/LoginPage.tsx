@@ -17,29 +17,77 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  
-  // Fixed credentials as per the requirements
-  const fixedCredentials = {
-    username: "admin@example.com",
-    password: "admin123"
+  const [credentials, setCredentials] = useState({
+    username: "",
+    password: ""
+  });
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { id, value } = e.target;
+    setCredentials(prev => ({
+      ...prev,
+      [id === "email" ? "username" : id]: value
+    }));
   };
 
   const handleLogin = async () => {
+    // Validate inputs
+    if (!credentials.username || !credentials.password) {
+      toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: "Please enter both email and password"
+      });
+      return;
+    }
+
+    console.log('Attempting login with:', credentials);
     setLoading(true);
+    
+    // Set a timeout to automatically stop the loading state if it takes too long
+    const loginTimeout = setTimeout(() => {
+      setLoading(false);
+      toast({
+        variant: "destructive",
+        title: "Login Timeout",
+        description: "Login request is taking too long. Please try again later."
+      });
+    }, 10000); // 10 second backup timeout
+    
     try {
-      const response = await apiRequest("POST", "/api/login", fixedCredentials);
+      // Use a shorter timeout for the API request
+      const response = await apiRequest("POST", "/api/login", credentials, 8000);
+      console.log('Login response status:', response.status);
       const userData = await response.json();
+      console.log('Login response data:', userData);
       
       // Call the login function from props
       onLoginSuccess();
       setShowSuccessModal(true);
     } catch (error) {
+      console.error('Login error:', error);
+      
+      // Provide more specific error messages
+      let errorMessage = "Invalid email or password";
+      if (error instanceof Error) {
+        if (error.message.includes("timeout")) {
+          errorMessage = "Login request timed out. Please try again later.";
+        } else if (error.message.includes("NetworkError") || error.message.includes("Failed to fetch")) {
+          errorMessage = "Network error. Please check your connection.";
+        } else if (error.message.includes("401")) {
+          errorMessage = "Invalid email or password.";
+        } else if (error.message.includes("500")) {
+          errorMessage = "Server error. Please try again later.";
+        }
+      }
+      
       toast({
         variant: "destructive",
         title: "Login Failed",
-        description: error instanceof Error ? error.message : "Invalid credentials"
+        description: errorMessage
       });
     } finally {
+      clearTimeout(loginTimeout);
       setLoading(false);
     }
   };
@@ -64,9 +112,10 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               <Input 
                 id="email" 
                 type="email" 
-                value={fixedCredentials.username} 
-                readOnly 
-                className="bg-gray-50"
+                value={credentials.username}
+                onChange={handleInputChange}
+                placeholder="Enter your email"
+                disabled={loading}
               />
             </div>
             
@@ -75,9 +124,11 @@ export default function LoginPage({ onLoginSuccess }: LoginPageProps) {
               <Input 
                 id="password" 
                 type="password" 
-                value={fixedCredentials.password} 
-                readOnly 
-                className="bg-gray-50"
+                value={credentials.password}
+                onChange={handleInputChange}
+                placeholder="Enter your password"
+                onKeyDown={(e) => e.key === 'Enter' && !loading && handleLogin()}
+                disabled={loading}
               />
             </div>
             

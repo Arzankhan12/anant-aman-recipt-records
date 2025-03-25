@@ -4,6 +4,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle } from "lucide-react";
@@ -33,12 +34,15 @@ export default function LoginSuccessModal({ isOpen, onClose }: LoginSuccessModal
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md" aria-describedby="login-success-description">
         <DialogHeader className="text-center">
           <div className="flex justify-center mb-4">
             <CheckCircle className="h-12 w-12 text-green-500" />
           </div>
           <DialogTitle className="text-xl">Login Successful!</DialogTitle>
+          <DialogDescription id="login-success-description" className="sr-only">
+            Login successful notification dialog
+          </DialogDescription>
         </DialogHeader>
         <div className="text-center py-4">
           <p className="text-gray-600">Welcome, Admin!</p>

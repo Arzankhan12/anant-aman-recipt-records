@@ -177,7 +177,7 @@ export default function UserListTab() {
                   </TableCell>
                   <TableCell>{user.username}</TableCell>
                   <TableCell>
-                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                    <span style={{ color : 'white'}} className={`py-2 px-2 inline-flex text-lg leading-5 font-semibold rounded ${
                       user.role === 'admin' 
                         ? 'bg-primary bg-opacity-10 text-primary' 
                         : 'bg-secondary bg-opacity-10 text-secondary'
