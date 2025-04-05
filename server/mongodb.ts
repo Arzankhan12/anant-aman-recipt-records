@@ -18,18 +18,16 @@ export class MongoDBStorage implements IStorage {
   private connectionPromise: Promise<void> | null = null;
   private connectionAttempts: number = 0;
   private readonly MAX_CONNECTION_ATTEMPTS = 3;
-  private readonly OPERATION_TIMEOUT_MS = 10000; // Increased to 10 seconds timeout for operations
+  private readonly OPERATION_TIMEOUT_MS = 5000; // Standard timeout for operations
 
   constructor(uri: string, dbName: string) {
-    // Configure MongoDB client with more robust settings
+    // Configure MongoDB client with standard settings
     this.client = new MongoClient(uri, {
       serverApi: {
         version: ServerApiVersion.v1,
         strict: true,
         deprecationErrors: true,
-      },
-      connectTimeoutMS: 10000, // Increased to 10 seconds timeout for connection
-      socketTimeoutMS: 15000, // Increased to 15 seconds for socket operations
+      }
     });
     
     // Initialize connection
@@ -39,15 +37,10 @@ export class MongoDBStorage implements IStorage {
   private async initConnection(dbName: string): Promise<void> {
     try {
       this.connectionAttempts++;
-      console.log(`Attempting to connect to MongoDB at ${this.client.options.hosts?.map(h => `${h.host}:${h.port}`).join(', ')}... (Attempt ${this.connectionAttempts}/${this.MAX_CONNECTION_ATTEMPTS})`);
+      console.log(`Attempting to connect to MongoDB... (Attempt ${this.connectionAttempts}/${this.MAX_CONNECTION_ATTEMPTS})`);
       
-      // Add timeout to the connect operation
-      await Promise.race([
-        this.client.connect(),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('MongoDB connection timed out')), 10000);
-        })
-      ]);
+      // Standard connection without timeout
+      await this.client.connect();
       
       this.db = this.client.db(dbName);
       this.usersCollection = this.db.collection('users');
@@ -151,22 +144,64 @@ export class MongoDBStorage implements IStorage {
     }
   }
 
-  async getUser(id: number): Promise<User | undefined> {
+  async getUser(id: number | string): Promise<User | undefined> {
     try {
       await this.ensureConnected();
+      
+      // Log the incoming ID for debugging
+      console.log(`Getting user with ID: ${id}, type: ${typeof id}`);
+      
       return await this.executeWithTimeout(async () => {
-        const user = await this.usersCollection.findOne({ id: id });
-        if (!user) return undefined;
+        let user;
         
-        return {
-          id: user._id.toString(),
-          username: user.username,
-          password: user.password,
-          fullName: user.fullName,
-          role: user.role,
-          isActive: user.isActive ?? true,
-          createdAt: user.createdAt ?? new Date()
-        };
+        // If id is a string that looks like an ObjectId, try that first
+        if (typeof id === 'string' && id.length === 24) {
+          try {
+            const objectId = new ObjectId(id);
+            console.log(`Trying to find with ObjectId: ${objectId}`);
+            
+            user = await this.usersCollection.findOne({ _id: objectId });
+            
+            if (user) {
+              console.log(`User found by ObjectId: ${user.username}`);
+              return {
+                id: user._id.toString(),
+                username: user.username,
+                password: user.password,
+                fullName: user.fullName,
+                role: user.role,
+                isActive: user.isActive ?? true,
+                createdAt: user.createdAt ?? new Date()
+              };
+            }
+          } catch (err) {
+            console.error('Error finding user by ObjectId:', err);
+          }
+        }
+        
+        // Try to find by numeric ID
+        if (!user) {
+          const numericId = typeof id === 'string' ? parseInt(id) : id;
+          if (!isNaN(numericId)) {
+            user = await this.usersCollection.findOne({ id: numericId });
+            
+            if (user) {
+              console.log(`User found by numeric ID: ${user.username}`);
+              return {
+                id: user._id.toString(),
+                username: user.username,
+                password: user.password,
+                fullName: user.fullName,
+                role: user.role,
+                isActive: user.isActive ?? true,
+                createdAt: user.createdAt ?? new Date()
+              };
+            }
+          }
+        }
+        
+        console.log(`User not found with id: ${id}`);
+        return undefined;
       });
     } catch (error: unknown) {
       console.error('Error in getUser:', error);
@@ -241,42 +276,127 @@ export class MongoDBStorage implements IStorage {
     }
   }
 
-  async updateUserStatus(id: number, isActive: boolean): Promise<User | undefined> {
+  async updateUserStatus(id: number | string, isActive: boolean): Promise<User | undefined> {
     try {
       await this.ensureConnected();
       
-      const result = await this.executeWithTimeout(async () => {
-        const user = await this.usersCollection.findOneAndUpdate(
-          { id }, 
+      // Log the incoming ID for debugging
+      console.log(`MongoDB: Updating user status for ID: ${id}, type: ${typeof id}, setting isActive to: ${isActive}`);
+      
+      return await this.executeWithTimeout(async () => {
+        let user;
+        let objectId;
+        
+        // If id is a string that looks like an ObjectId, try to convert it
+        if (typeof id === 'string' && id.length === 24) {
+          try {
+            objectId = new ObjectId(id);
+            console.log(`MongoDB: Valid ObjectId: ${objectId}`);
+          } catch (err) {
+            console.error('MongoDB: Invalid ObjectId format:', err);
+          }
+        }
+        
+        // Try to find the user with the appropriate query
+        if (objectId) {
+          // First try by ObjectId
+          user = await this.usersCollection.findOne({ _id: objectId });
+          console.log(`MongoDB: User lookup by ObjectId result: ${user ? 'Found' : 'Not found'}`);
+        }
+        
+        // If not found and id is numeric, try by numeric id
+        if (!user && (typeof id === 'number' || !isNaN(Number(id)))) {
+          const numericId = typeof id === 'number' ? id : Number(id);
+          user = await this.usersCollection.findOne({ id: numericId });
+          console.log(`MongoDB: User lookup by numeric ID result: ${user ? 'Found' : 'Not found'}`);
+        }
+        
+        // If still not found, try by string id as a last resort
+        if (!user && typeof id === 'string') {
+          user = await this.usersCollection.findOne({ id: id });
+          console.log(`MongoDB: User lookup by string ID result: ${user ? 'Found' : 'Not found'}`);
+        }
+        
+        if (!user) {
+          console.log(`MongoDB: User not found with id: ${id}`);
+          return undefined;
+        }
+        
+        console.log(`MongoDB: User found: ${user.username}, _id: ${user._id}, current isActive: ${user.isActive}`);
+        
+        // Update the user with the correct query based on how we found them
+        const updateResult = await this.usersCollection.findOneAndUpdate(
+          { _id: user._id },
           { $set: { isActive } },
           { returnDocument: 'after' }
         );
         
-        if (!user.value) return undefined;
+        if (!updateResult.value) {
+          console.log(`MongoDB: Failed to update user: ${user.username}`);
+          return undefined;
+        }
+        
+        console.log(`MongoDB: User updated successfully: ${updateResult.value.username}, new isActive: ${updateResult.value.isActive}`);
         
         return {
-          id: user.value._id.toString(),
-          username: user.value.username,
-          password: user.value.password,
-          fullName: user.value.fullName,
-          role: user.value.role,
-          isActive: user.value.isActive ?? true,
-          createdAt: user.value.createdAt ?? new Date()
+          id: updateResult.value._id.toString(),
+          username: updateResult.value.username,
+          password: updateResult.value.password,
+          fullName: updateResult.value.fullName,
+          role: updateResult.value.role,
+          isActive: updateResult.value.isActive ?? true,
+          createdAt: updateResult.value.createdAt ?? new Date()
         };
       });
-      
-      return result;
     } catch (error: unknown) {
-      console.error('Error in updateUserStatus:', error);
+      console.error('MongoDB: Error in updateUserStatus:', error);
       throw error;
     }
   }
 
-  async deleteUser(id: number): Promise<void> {
+  async deleteUser(id: number | string): Promise<void> {
     try {
       await this.ensureConnected();
+      
+      // Log the incoming ID for debugging
+      console.log(`Deleting user with ID: ${id}, type: ${typeof id}`);
+      
       await this.executeWithTimeout(async () => {
-        await this.usersCollection.deleteOne({ id });
+        let deleted = false;
+        
+        // If id is a string that looks like an ObjectId, try that first
+        if (typeof id === 'string' && id.length === 24) {
+          try {
+            const objectId = new ObjectId(id);
+            console.log(`Trying to delete with ObjectId: ${objectId}`);
+            
+            const result = await this.usersCollection.deleteOne({ _id: objectId });
+            
+            if (result.deletedCount > 0) {
+              console.log(`User deleted with ObjectId: ${objectId}`);
+              deleted = true;
+            }
+          } catch (err) {
+            console.error('Error deleting user by ObjectId:', err);
+          }
+        }
+        
+        // If not deleted yet, try by numeric ID
+        if (!deleted) {
+          const numericId = typeof id === 'string' ? parseInt(id) : id;
+          if (!isNaN(numericId)) {
+            const result = await this.usersCollection.deleteOne({ id: numericId });
+            
+            if (result.deletedCount > 0) {
+              console.log(`User deleted with numeric id: ${numericId}`);
+              deleted = true;
+            }
+          }
+        }
+        
+        if (!deleted) {
+          console.log(`User not found with id: ${id}`);
+        }
       });
     } catch (error: unknown) {
       console.error('Error in deleteUser:', error);
@@ -305,7 +425,7 @@ export class MongoDBStorage implements IStorage {
         contactNumber: insertDonation.contactNumber,
         address: insertDonation.address,
         email: insertDonation.email,
-        panNumber: insertDonation.panNumber,
+        panNumber: insertDonation.panNumber || null,
         paymentMode: insertDonation.paymentMode,
         amount: insertDonation.amount,
         amountInWords: insertDonation.amountInWords,
@@ -313,6 +433,7 @@ export class MongoDBStorage implements IStorage {
         drawnOn: insertDonation.drawnOn || null,
         instrumentDate: insertDonation.instrumentDate || null,
         instrumentNumber: insertDonation.instrumentNumber || null,
+        createdBy: insertDonation.createdBy || null,
         createdAt: now
       };
       
@@ -383,12 +504,30 @@ export class MongoDBStorage implements IStorage {
     try {
       await this.ensureConnected();
       
+      // Get the last receipt number from MongoDB
       const donations = await this.executeWithTimeout(async () => {
-        const result = await this.donationsCollection.find().sort({ receiptNumber: -1 }).limit(1).toArray();
-        return result.length > 0 ? result[0] : null;
+        // First try to find donations with numeric receipt numbers
+        const numericRegex = /^\d+$/;
+        const numericResults = await this.donationsCollection.find({
+          receiptNumber: { $regex: numericRegex }
+        }).sort({ receiptNumber: -1 }).limit(1).toArray();
+        
+        // If we found numeric receipt numbers, return the highest one
+        if (numericResults.length > 0) {
+          console.log('Found numeric receipt number:', numericResults[0].receiptNumber);
+          return numericResults[0];
+        }
+        
+        // Otherwise, fall back to the old format
+        const results = await this.donationsCollection.find().sort({ receiptNumber: -1 }).limit(1).toArray();
+        return results.length > 0 ? results[0] : null;
       });
       
-      return donations ? donations.receiptNumber : undefined;
+      if (donations) {
+        console.log('Last receipt number from MongoDB:', donations.receiptNumber);
+        return donations.receiptNumber;
+      }
+      return undefined;
     } catch (error: unknown) {
       console.error('Error in getLastReceiptNumber:', error);
       throw error;

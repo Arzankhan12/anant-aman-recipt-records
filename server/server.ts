@@ -1,13 +1,16 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { createServer, type Server } from "http";
-import { setupVite, serveStatic, log } from "./vite";
-import { registerRoutes } from "./routes";
 import dotenv from 'dotenv';
+import { setupVite, serveStatic, log } from "./vite";
+import apiRouter from "./routes/api-router";
 
 // Load environment variables from .env file
 dotenv.config();
 
+// Create Express application
 const app = express();
+
+// Middleware setup
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
@@ -56,9 +59,8 @@ process.on('unhandledRejection', (reason, promise) => {
 // Start the server
 (async () => {
   try {
-    // Register the original routes for backward compatibility
-    // This ensures that existing endpoints like /api/admin/login continue to work
-    registerRoutes(app);
+    // Apply routes with /api prefix
+    app.use('/api', apiRouter);
     
     // Create HTTP server
     const server = createServer(app);
@@ -73,15 +75,17 @@ process.on('unhandledRejection', (reason, promise) => {
       // Don't rethrow the error, just log it
     });
 
+    // Setup Vite in development mode
     if (app.get("env") === "development") {
       await setupVite(app, server);
     } else {
       serveStatic(app);
     }
 
+    // Start the server
     const port = process.env.PORT ? parseInt(process.env.PORT) : 5000;
     server.listen(port, "0.0.0.0", () => {
-      log(`serving on port ${port}`);
+      log(`Express server running on port ${port}`);
     });
 
     // Handle server errors

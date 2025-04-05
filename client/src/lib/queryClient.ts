@@ -16,10 +16,29 @@ export async function apiRequest(
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
   
+  // Get the current user ID from localStorage
+  let headers: Record<string, string> = {};
+  if (data) {
+    headers["Content-Type"] = "application/json";
+  }
+  
+  // Add user ID to headers if available
+  try {
+    const userJson = localStorage.getItem('user');
+    if (userJson) {
+      const user = JSON.parse(userJson);
+      if (user && user.id) {
+        headers["user-id"] = user.id.toString();
+      }
+    }
+  } catch (e) {
+    console.error("Error getting user from localStorage:", e);
+  }
+  
   try {
     const res = await fetch(url, {
       method,
-      headers: data ? { "Content-Type": "application/json" } : {},
+      headers,
       body: data ? JSON.stringify(data) : undefined,
       credentials: "include",
       signal: controller.signal,

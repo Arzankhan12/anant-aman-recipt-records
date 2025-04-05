@@ -3,11 +3,13 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { convertToWords } from "@/lib/numberToWords";
 import { generatePdf } from "@/lib/pdfGenerator";
 import { sendEmail as sendEmailService } from "../lib/emailService"; // Import with alias to avoid conflict
+import anantamanLogo from "../assets/Anant-Aman_Logo-1.png";
+import { useAuth } from "@/context/AuthContext";
 
 import {
   Form,
@@ -35,7 +37,7 @@ const formSchema = z.object({
   contactNumber: z.string().min(10, "Contact number must be at least 10 digits"),
   address: z.string().min(1, "Address is required"),
   email: z.string().email("Invalid email address"),
-  panNumber: z.string().min(1, "PAN number is required"),
+  panNumber: z.string().optional(),
   paymentMode: z.enum(["cash", "online", "dd", "cheque"]),
   amount: z.coerce.number().positive("Amount must be positive"),
   amountInWords: z.string().min(1, "Amount in words is required"),
@@ -43,6 +45,7 @@ const formSchema = z.object({
   instrumentDate: z.string().optional(),
   drawnOn: z.string().optional(),
   instrumentNumber: z.string().optional(),
+  submittedBy: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -53,18 +56,30 @@ interface DonationFormProps {
 
 export default function DonationForm({ onSubmissionSuccess }: DonationFormProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const [showInstrumentFields, setShowInstrumentFields] = useState(false);
 
   // Fetch the next receipt number
   const { data: receiptData, isLoading: isLoadingReceipt, refetch: refetchReceiptNumber } = useQuery<{ receiptNumber: string }>({
     queryKey: ['/api/next-receipt-number'],
     queryFn: async (): Promise<{ receiptNumber: string }> => {
-      const response = await fetch('/api/next-receipt-number');
-      if (!response.ok) {
-        throw new Error('Failed to fetch receipt number');
+      try {
+        console.log('Fetching next receipt number...');
+        const response = await fetch('/api/next-receipt-number');
+        if (!response.ok) {
+          throw new Error('Failed to fetch receipt number');
+        }
+        const data = await response.json();
+        console.log('Received receipt number:', data.receiptNumber);
+        return { receiptNumber: data.receiptNumber };
+      } catch (error) {
+        console.error('Error fetching receipt number:', error);
+        throw error;
       }
-      return response.json();
-    }
+    },
+    // Don't cache the receipt number to ensure we always get a fresh one
+    staleTime: 0
   });
 
   const form = useForm<FormValues>({
@@ -84,6 +99,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
       instrumentDate: "",
       drawnOn: "",
       instrumentNumber: "",
+      submittedBy: user ? user.username : "unknown",
     },
   });
 
@@ -108,20 +124,42 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
       if (name === "paymentMode") {
         const mode = value.paymentMode;
         setShowInstrumentFields(mode === "dd" || mode === "cheque");
+        
+        // If switching to cash mode, check if amount is over 2000
+        if (mode === "cash") {
+          const currentAmount = form.getValues("amount");
+          if (currentAmount > 2000) {
+            toast({
+              variant: "destructive",
+              title: "Cash Payment Limit",
+              description: "Cash payments cannot exceed ₹2000. Please reduce the amount or choose a different payment method.",
+            });
+            form.setValue("amount", 0);
+            form.setValue("amountInWords", "");
+          }
+        }
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [form]);
+  }, [form, toast]);
 
   // Handle form submission
   const submitMutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      const response = await apiRequest("POST", "/api/donations", values);
+      console.log('Submitting form with values:', values);
+      // Add the current user's username to the donation data
+      const donationData = {
+        ...values,
+        createdBy: user ? user.username : "unknown"
+      };
+      const response = await apiRequest("POST", "/api/donations", donationData);
       return response.json();
     },
     onSuccess: async (data, variables) => {
       try {
+        console.log('Form submitted successfully, donation created:', data);
+        
         // Generate PDF
         const pdfBlob = await generatePdf(variables);
 
@@ -134,9 +172,19 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
           description: "Receipt has been generated and sent to the donor's email.",
         });
 
-        // Reset form except for the receipt number field (which should be auto-incremented)
+        // Explicitly invalidate the receipt number query to force a refetch
+        queryClient.invalidateQueries({ queryKey: ['/api/next-receipt-number'] });
+        
+        // Refetch the receipt number to get the next one
+        console.log('Refetching receipt number...');
+        const newReceiptData = await refetchReceiptNumber();
+        const newReceiptNumber = newReceiptData.data?.receiptNumber || '';
+        console.log('New receipt number:', newReceiptNumber);
+
+        // Reset form with the new receipt number
         form.reset({
-          ...form.getValues(),
+          receiptNumber: newReceiptNumber,
+          date: new Date().toISOString().split('T')[0],
           donorName: "",
           contactNumber: "",
           address: "",
@@ -149,14 +197,13 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
           instrumentDate: "",
           drawnOn: "",
           instrumentNumber: "",
+          submittedBy: user ? user.username : "unknown",
         });
-
-        // Refetch the receipt number to get the next one
-        refetchReceiptNumber();
 
         // Notify parent component of successful submission
         onSubmissionSuccess(variables.email);
       } catch (error) {
+        console.error('Error after form submission:', error);
         toast({
           variant: "destructive",
           title: "Error",
@@ -178,6 +225,36 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
   }
 
   return (
+    <>
+     <div className="container mx-auto max-w-8xl">
+      <div className="flex items-center justify-between p-4 border-b">
+        <div className="flex items-center">
+          <img 
+            src={anantamanLogo} 
+            alt="Anantaman Logo" 
+            className="w-full max-sm:w- h-24 mr-4 object-contain"
+          />
+        </div>
+        
+        <div className="text-right">
+          <p className="text-sm">
+            Reg. No. - 03/27/03/16480/13
+          </p>
+          <p className="text-sm">
+            Reg. Address: 9, Naresh Apartment, Sadhu Vaswani Nagar, Indore
+          </p>
+          <p className="text-sm">
+            (M.P.) 452 001
+          </p>
+          <p className="text-sm">
+            Mob. 777-199-7475
+          </p>
+          <p className="text-sm text-blue-700">
+            E-mail: anantaman.sws@gmail.com
+          </p>
+        </div>
+      </div>
+    </div>
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -268,62 +345,64 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="panNumber"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>PAN Number</FormLabel>
-              <FormControl>
-                <Input {...field} placeholder="Enter PAN number" />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <FormField
+            control={form.control}
+            name="panNumber"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>PAN Number</FormLabel>
+                <FormControl>
+                  <Input {...field} placeholder="Enter PAN number" />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
           <FormField
             control={form.control}
             name="paymentMode"
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Mode of Payment</FormLabel>
-                <Select 
-                  onValueChange={field.onChange} 
-                  defaultValue={field.value}
-                >
-                  <FormControl>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select payment mode" />
-                    </SelectTrigger>
-                  </FormControl>
-                  <SelectContent>
-                    <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="online">Online</SelectItem>
-                    <SelectItem value="dd">D.D</SelectItem>
-                    <SelectItem value="cheque">Cheque</SelectItem>
-                  </SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <FormField
-            control={form.control}
-            name="purpose"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Purpose</FormLabel>
                 <FormControl>
-                  <Input {...field} placeholder="Enter purpose of donation" />
+                  <Select 
+                    onValueChange={field.onChange} 
+                    defaultValue={field.value}
+                  >
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select payment mode" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="online">Online</SelectItem>
+                      <SelectItem value="dd">D.D</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </FormControl>
                 <FormMessage />
               </FormItem>
             )}
           />
         </div>
+
+        <FormField
+          control={form.control}
+          name="purpose"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Purpose</FormLabel>
+              <FormControl>
+                <Input {...field} placeholder="Enter purpose of donation" />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <FormField
@@ -338,11 +417,26 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
                     type="number" 
                     placeholder="Enter amount"
                     onChange={e => {
-                      field.onChange(e);
                       const amount = parseInt(e.target.value);
-                      if (!isNaN(amount)) {
-                        const words = convertToWords(amount);
+                      const paymentMode = form.getValues("paymentMode");
+                      
+                      // Check if payment mode is cash and amount exceeds 2000
+                      if (paymentMode === "cash" && amount > 2000) {
+                        toast({
+                          variant: "destructive",
+                          title: "Cash Payment Limit",
+                          description: "Cash payments cannot exceed ₹2000. Please reduce the amount or choose a different payment method.",
+                        });
+                        // Reset to 2000 for cash payments
+                        field.onChange("2000");
+                        const words = convertToWords(2000);
                         form.setValue("amountInWords", words + " Rupees Only");
+                      } else {
+                        field.onChange(e);
+                        if (!isNaN(amount)) {
+                          const words = convertToWords(amount);
+                          form.setValue("amountInWords", words + " Rupees Only");
+                        }
                       }
                     }}
                   />
@@ -418,7 +512,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
           </div>
         )}
 
-        <div className="pt-4">
+        <div className="mt-4">
           <Button 
             type="submit" 
             disabled={submitMutation.isPending || isLoadingReceipt}
@@ -428,6 +522,7 @@ export default function DonationForm({ onSubmissionSuccess }: DonationFormProps)
         </div>
       </form>
     </Form>
+    </>
   );
 }
 

@@ -4,6 +4,8 @@ import { Button } from "@/components/ui/button";
 import DonationForm from "@/components/DonationForm";
 import PaymentInfoSection from "@/components/PaymentInfoSection";
 import SubmissionModal from "@/components/SubmissionModal";
+import anantamanLogo from "../assets/Anant-Aman_Logo-1.png";
+import LogoutIcon from '@mui/icons-material/Logout';
 
 interface FormPageProps {
   onLogout: () => void;
@@ -33,21 +35,21 @@ export default function FormPage({ onLogout }: FormPageProps) {
       {/* Header */}
       <header className="bg-primary text-white shadow-md">
         <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-          <h1 className="text-xl font-medium">Anant Aman Social Welfare Society</h1>
+          <img src={anantamanLogo} className="w-[15rem] object-contain h-[5rem]" alt="" />
           <div className="flex items-center space-x-4">
             <Button 
               variant="ghost" 
               className="text-white hover:bg-white/20"
-              onClick={() => setLocation("/admin")}
+              onClick={() => setLocation("/admin-login")}
             >
-              <span className="mr-2">👤</span> Admin Panel
+              <span className="mr-2">👤</span> Admin Login
             </Button>
             <Button 
               variant="ghost" 
               className="text-white hover:bg-white/20"
               onClick={handleLogout}
             >
-              <span className="mr-2">🚪</span> Logout
+              <LogoutIcon className="mr-2" /> Logout
             </Button>
           </div>
         </div>
@@ -56,7 +58,6 @@ export default function FormPage({ onLogout }: FormPageProps) {
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
         <div className="bg-white rounded-lg shadow-md p-6 mb-8">
-          <h2 className="text-2xl font-medium text-gray-800 mb-6">Donation Receipt Form</h2>
           <DonationForm onSubmissionSuccess={handleSubmissionSuccess} />
         </div>
         

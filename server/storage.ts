@@ -5,17 +5,17 @@ import {
   donations,
   type Donation,
   type InsertDonation 
-} from "@shared/schema";
+} from "../shared/schema";
 import { MongoDBStorage } from './mongodb';
 
 export interface IStorage {
   // User operations
-  getUser(id: number): Promise<User | undefined>;
+  getUser(id: number | string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getUsers(): Promise<User[]>;
-  updateUserStatus(id: number, isActive: boolean): Promise<User | undefined>;
-  deleteUser(id: number): Promise<void>;
+  updateUserStatus(id: number | string, isActive: boolean): Promise<User | undefined>;
+  deleteUser(id: number | string): Promise<void>;
   
   // Donation operations
   createDonation(donation: InsertDonation): Promise<Donation>;
@@ -71,7 +71,7 @@ export class StorageWrapper implements IStorage {
   }
 
   // User operations
-  async getUser(id: number): Promise<User | undefined> {
+  async getUser(id: number | string): Promise<User | undefined> {
     return this.executeWithFallback(storage => storage.getUser(id));
   }
 
@@ -87,11 +87,11 @@ export class StorageWrapper implements IStorage {
     return this.executeWithFallback(storage => storage.getUsers());
   }
 
-  async updateUserStatus(id: number, isActive: boolean): Promise<User | undefined> {
+  async updateUserStatus(id: number | string, isActive: boolean): Promise<User | undefined> {
     return this.executeWithFallback(storage => storage.updateUserStatus(id, isActive));
   }
 
-  async deleteUser(id: number): Promise<void> {
+  async deleteUser(id: number | string): Promise<void> {
     return this.executeWithFallback(storage => storage.deleteUser(id));
   }
 
@@ -139,8 +139,8 @@ export class MemStorage implements IStorage {
   }
 
   // User operations
-  async getUser(id: number): Promise<User | undefined> {
-    return this.users.get(id);
+  async getUser(id: number | string): Promise<User | undefined> {
+    return this.users.get(Number(id));
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
@@ -168,20 +168,20 @@ export class MemStorage implements IStorage {
     return Array.from(this.users.values());
   }
 
-  async updateUserStatus(id: number, isActive: boolean): Promise<User | undefined> {
-    const user = this.users.get(id);
+  async updateUserStatus(id: number | string, isActive: boolean): Promise<User | undefined> {
+    const user = this.users.get(Number(id));
     
     if (!user) {
       return undefined;
     }
     
     const updatedUser = { ...user, isActive };
-    this.users.set(id, updatedUser);
+    this.users.set(Number(id), updatedUser);
     return updatedUser;
   }
 
-  async deleteUser(id: number): Promise<void> {
-    this.users.delete(id);
+  async deleteUser(id: number | string): Promise<void> {
+    this.users.delete(Number(id));
   }
 
   // Donation operations
@@ -189,16 +189,27 @@ export class MemStorage implements IStorage {
     const id = this.donationCurrentId++;
     const now = new Date();
     
-    // Ensure all optional fields are properly typed as null if not provided
-    const donation: Donation = {
-      ...insertDonation,
+    // Create a donation object with all required fields
+    const donation = {
       id,
-      createdAt: now,
-      // Set optional fields to null if they're undefined
-      drawnOn: insertDonation.drawnOn || null,
+      receiptNumber: insertDonation.receiptNumber,
+      date: insertDonation.date,
+      donorName: insertDonation.donorName,
+      contactNumber: insertDonation.contactNumber,
+      address: insertDonation.address,
+      email: insertDonation.email,
+      panNumber: insertDonation.panNumber || null,
+      paymentMode: insertDonation.paymentMode,
+      amount: insertDonation.amount,
+      amountInWords: insertDonation.amountInWords,
+      purpose: insertDonation.purpose,
       instrumentDate: insertDonation.instrumentDate || null,
-      instrumentNumber: insertDonation.instrumentNumber || null
-    };
+      drawnOn: insertDonation.drawnOn || null,
+      instrumentNumber: insertDonation.instrumentNumber || null,
+      createdBy: insertDonation.createdBy || null,
+      createdAt: now
+    } as Donation;
+    
     this.donations.set(id, donation);
     return donation;
   }
@@ -221,11 +232,17 @@ export class MemStorage implements IStorage {
     const donations = Array.from(this.donations.values());
     if (donations.length === 0) return undefined;
     
-    // Sort donations by receipt number
+    // Sort donations by receipt number (assuming numeric format)
     donations.sort((a, b) => {
+      // If both are numeric, sort numerically
+      if (/^\d+$/.test(a.receiptNumber) && /^\d+$/.test(b.receiptNumber)) {
+        return parseInt(b.receiptNumber) - parseInt(a.receiptNumber);
+      }
+      // Otherwise use string comparison
       return b.receiptNumber.localeCompare(a.receiptNumber);
     });
     
+    console.log('Last receipt number from memory storage:', donations[0].receiptNumber);
     return donations[0].receiptNumber;
   }
 }

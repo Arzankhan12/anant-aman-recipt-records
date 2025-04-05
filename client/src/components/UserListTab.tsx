@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { User } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -17,102 +16,133 @@ import {
 } from "@/components/ui/table";
 import { Search, CheckCircle, XCircle } from "lucide-react";
 
+// Define User interface
+interface User {
+  id: string | number;
+  username: string;
+  fullName: string;
+  role: string;
+  isActive: boolean;
+  createdAt?: Date;
+}
+
 export default function UserListTab() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [searchQuery, setSearchQuery] = useState("");
-  
+
   // Fetch users
   const { data: users = [], isLoading } = useQuery<User[]>({
-    queryKey: ['/api/users'],
+    queryKey: ["/api/users"],
   });
-  
+
   // Filter users based on search query
-  const filteredUsers = users.filter(user => 
-    user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    user.username.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredUsers = users.filter(
+    (user) =>
+      user.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      user.username.toLowerCase().includes(searchQuery.toLowerCase())
   );
-  
+
   // Delete user mutation
   const deleteUserMutation = useMutation({
-    mutationFn: async (userId: number) => {
+    mutationFn: async (userId: string | number) => {
       await apiRequest("DELETE", `/api/users/${userId}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
-      toast({
-        title: "User deleted",
-        description: "The user has been deleted successfully.",
-      });
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "User deleted", description: "User removed successfully." });
     },
     onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete user",
+        description: error instanceof Error ? error.message : "Failed to delete user.",
       });
     },
   });
-  
+
   // Toggle user active status mutation
   const toggleUserStatusMutation = useMutation({
-    mutationFn: async ({ userId, isActive }: { userId: number; isActive: boolean }) => {
-      const response = await apiRequest("PATCH", `/api/users/${userId}/status`, { isActive });
-      const data = await response.json();
-      return data as User;
+    mutationFn: async ({ userId, isActive }: { userId: string | number; isActive: boolean }) => {
+      try {
+        console.log(`Updating user ${userId} (type: ${typeof userId})`);
+
+        // Ensure user exists before making API call
+        const existingUser = users.find((u) => u.id === userId);
+        if (!existingUser) {
+          throw new Error("User not found. Refresh the list.");
+        }
+
+        // Convert ID to string for consistency
+        const idString = userId.toString();
+
+        // API request
+        const response = await apiRequest("PATCH", `/api/users/${idString}/status`, { isActive });
+
+        // Validate response
+        if (!response.ok) {
+          throw new Error(`Server error: ${response.status} - ${response.statusText}`);
+        }
+
+        return response.json() as Promise<User & { shouldLogout?: boolean }>;
+      } catch (error) {
+        console.error("Error in toggleUserStatusMutation:", error);
+        throw error;
+      }
     },
-    onSuccess: (data: User) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
-      
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+
       const statusText = data.isActive ? "activated" : "deactivated";
-      toast({
-        title: `User ${statusText}`,
-        description: `${data.fullName} has been ${statusText} successfully.`,
-      });
-      
-      // If user is deactivated, we'll show a message about them being logged out
-      if (!data.isActive) {
+      toast({ title: `User ${statusText}`, description: `${data.fullName} is now ${statusText}.` });
+
+      if (data.shouldLogout) {
         toast({
-          title: "User logged out",
-          description: "The user will be automatically logged out on their next request.",
-          variant: "default",
+          title: "Your account has been deactivated",
+          description: "Logging out now.",
+          variant: "destructive",
         });
+
+        setTimeout(() => {
+          localStorage.removeItem("isAuthenticated");
+          localStorage.removeItem("user");
+          window.location.href = "/";
+        }, 1000);
       }
     },
     onError: (error) => {
       toast({
         variant: "destructive",
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update user status",
+        description: error instanceof Error ? error.message : "Failed to update user status.",
       });
     },
   });
-  
-  const handleToggleStatus = (userId: number, currentStatus: boolean) => {
+
+  const handleToggleStatus = (userId: string | number, currentStatus: boolean) => {
     const newStatus = !currentStatus;
     const action = newStatus ? "activate" : "deactivate";
-    
-    if (window.confirm(`Are you sure you want to ${action} this user?${!newStatus ? " This will log them out immediately." : ""}`)) {
+
+    if (window.confirm(`Are you sure you want to ${action} this user?`)) {
       toggleUserStatusMutation.mutate({ userId, isActive: newStatus });
     }
   };
-  
-  const handleDeleteUser = (userId: number) => {
+
+  const handleDeleteUser = (userId: string | number) => {
     if (window.confirm("Are you sure you want to delete this user?")) {
       deleteUserMutation.mutate(userId);
     }
   };
-  
+
   const getInitials = (name: string) => {
-    return name.split(' ').map(n => n[0]).join('').toUpperCase();
+    return name.split(" ").map((n) => n[0]).join("").toUpperCase();
   };
-  
+
   const formatDate = (dateString: Date) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: '2-digit', 
-      year: 'numeric' 
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
     });
   };
 
@@ -147,15 +177,11 @@ export default function UserListTab() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
-                  Loading users...
-                </TableCell>
+                <TableCell colSpan={5} className="text-center py-8">Loading users...</TableCell>
               </TableRow>
             ) : filteredUsers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8">
-                  No users found.
-                </TableCell>
+                <TableCell colSpan={5} className="text-center py-8">No users found.</TableCell>
               </TableRow>
             ) : (
               filteredUsers.map((user) => (
@@ -163,69 +189,27 @@ export default function UserListTab() {
                   <TableCell>
                     <div className="flex items-center">
                       <Avatar className="h-10 w-10 mr-4">
-                        <AvatarFallback className="bg-primary text-white">
-                          {getInitials(user.fullName)}
-                        </AvatarFallback>
+                        <AvatarFallback className="bg-primary text-white">{getInitials(user.fullName)}</AvatarFallback>
                       </Avatar>
                       <div>
                         <div className="font-medium">{user.fullName}</div>
-                        <div className="text-sm text-gray-500">
-                          Joined on {user.createdAt ? formatDate(user.createdAt) : 'N/A'}
-                        </div>
+                        <div className="text-sm text-gray-500">Joined on {user.createdAt ? formatDate(user.createdAt) : "N/A"}</div>
                       </div>
                     </div>
                   </TableCell>
                   <TableCell>{user.username}</TableCell>
+                  <TableCell>{user.role}</TableCell>
                   <TableCell>
-                    <span style={{ color : 'white'}} className={`py-2 px-2 inline-flex text-lg leading-5 font-semibold rounded ${
-                      user.role === 'admin' 
-                        ? 'bg-primary bg-opacity-10 text-primary' 
-                        : 'bg-secondary bg-opacity-10 text-secondary'
-                    }`}>
-                      {user.role.charAt(0).toUpperCase() + user.role.slice(1)}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center space-x-2">
-                      <Switch
-                        checked={user.isActive}
-                        onCheckedChange={() => handleToggleStatus(user.id, user.isActive)}
-                        disabled={toggleUserStatusMutation.isPending}
-                      />
-                      <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        user.isActive 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {user.isActive ? (
-                          <span className="flex items-center">
-                            <CheckCircle className="w-3 h-3 mr-1" />
-                            Active
-                          </span>
-                        ) : (
-                          <span className="flex items-center">
-                            <XCircle className="w-3 h-3 mr-1" />
-                            Inactive
-                          </span>
-                        )}
-                      </span>
-                    </div>
+                    <Switch
+                      checked={user.isActive}
+                      onCheckedChange={() => handleToggleStatus(user.id, user.isActive)}
+                    />
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button 
-                      variant="ghost" 
-                      className={`${user.isActive ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'} mr-2`}
-                      onClick={() => handleToggleStatus(user.id, user.isActive)}
-                      disabled={toggleUserStatusMutation.isPending}
-                    >
-                      {user.isActive ? 'Deactivate' : 'Activate'}
+                    <Button variant="ghost" onClick={() => handleToggleStatus(user.id, user.isActive)}>
+                      {user.isActive ? "Deactivate" : "Activate"}
                     </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="text-red-500 hover:text-red-700"
-                      onClick={() => handleDeleteUser(user.id)}
-                      disabled={deleteUserMutation.isPending}
-                    >
+                    <Button variant="ghost" className="text-red-500" onClick={() => handleDeleteUser(user.id)}>
                       Delete
                     </Button>
                   </TableCell>
@@ -234,20 +218,6 @@ export default function UserListTab() {
             )}
           </TableBody>
         </Table>
-      </div>
-
-      <div className="mt-4 flex items-center justify-between">
-        <div className="text-sm text-gray-700">
-          Showing <span className="font-medium">1</span> to <span className="font-medium">{filteredUsers.length}</span> of <span className="font-medium">{filteredUsers.length}</span> results
-        </div>
-        <div className="flex space-x-2">
-          <Button variant="outline" disabled>
-            Previous
-          </Button>
-          <Button variant="outline" disabled>
-            Next
-          </Button>
-        </div>
       </div>
     </div>
   );

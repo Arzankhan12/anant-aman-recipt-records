@@ -29,7 +29,7 @@ export const donations = pgTable("donations", {
   contactNumber: text("contact_number").notNull(),
   address: text("address").notNull(),
   email: text("email").notNull(),
-  panNumber: text("pan_number").notNull(),
+  panNumber: text("pan_number"),  
   paymentMode: text("payment_mode").notNull(),
   amount: integer("amount").notNull(),
   amountInWords: text("amount_in_words").notNull(),
@@ -37,6 +37,7 @@ export const donations = pgTable("donations", {
   instrumentDate: date("instrument_date"),
   drawnOn: text("drawn_on"),
   instrumentNumber: text("instrument_number"),
+  createdBy: text("created_by"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -55,6 +56,7 @@ export const insertDonationSchema = createInsertSchema(donations).pick({
   instrumentDate: true,
   drawnOn: true,
   instrumentNumber: true,
+  createdBy: true,
 });
 
 export const loginSchema = z.object({

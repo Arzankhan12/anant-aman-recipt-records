@@ -2,57 +2,100 @@ import { Route, Switch } from "wouter";
 import LoginPage from "@/pages/LoginPage";
 import FormPage from "@/pages/FormPage";
 import AdminPanel from "@/pages/AdminPanel";
+import AdminLoginPage from "@/pages/AdminLoginPage";
 import NotFoundPage from "@/pages/NotFoundPage";
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useLocation } from "wouter";
+import { useAuth } from "@/context/AuthContext";
+
+interface User {
+  id: number;
+  username: string;
+  fullName: string;
+  role: string;
+}
 
 function App() {
-  // Start without authentication - login page will handle setting this
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const { isAuthenticated, user, login, logout } = useAuth();
   const [location, setLocation] = useLocation();
   
   // Function to be passed to login page
-  const handleLogin = () => {
-    setIsAuthenticated(true);
+  const handleLogin: () => void = () => {
+    // When user logs in, set a default user object
+    login({
+      id: 1,
+      username: "staff@example.com",
+      fullName: "Staff User",
+      role: "staff"
+    });
+  };
+  
+  // Function to be passed to admin login page
+  const handleAdminLogin: () => void = () => {
+    // When admin logs in, set user with admin role
+    login({
+      id: 2,
+      username: "admin@example.com",
+      fullName: "Admin User",
+      role: "admin"
+    });
   };
   
   // Function to be passed to pages that need logout
-  const handleLogout = () => {
-    setIsAuthenticated(false);
+  const handleLogout: () => void = () => {
+    logout();
     setLocation("/");
   };
 
   // Redirect to login if not authenticated
   useEffect(() => {
-    if (!isAuthenticated && location !== "/" && location !== "") {
+    if (!isAuthenticated && location !== "/" && location !== "" && location !== "/admin-login") {
       setLocation("/");
     }
   }, [isAuthenticated, location, setLocation]);
 
-  // Render login page at root
-  if (location === "/" || location === "") {
-    return <LoginPage onLoginSuccess={handleLogin} />;
-  }
+  // Redirect to form page if authenticated and at login page
+  useEffect(() => {
+    if (isAuthenticated && (location === "/" || location === "")) {
+      setLocation("/form");
+    }
+  }, [isAuthenticated, location, setLocation]);
 
-  // If authenticated, render the requested page, otherwise show NotFound
-  if (isAuthenticated) {
-    return (
-      <Switch>
-        <Route path="/form">
-          <FormPage onLogout={handleLogout} />
-        </Route>
-        <Route path="/admin">
-          <AdminPanel onLogout={handleLogout} />
-        </Route>
-        <Route>
-          <NotFoundPage />
-        </Route>
-      </Switch>
-    );
-  } else {
-    // Not authenticated, show NotFound for all routes except root
-    return <NotFoundPage />;
-  }
+  // Handle admin authentication
+  useEffect(() => {
+    // If trying to access admin panel without admin authentication
+    const isAdminAuthenticated = user?.role === 'admin';
+    if (location === "/admin" && !isAdminAuthenticated) {
+      setLocation("/admin-login");
+    }
+  }, [user, location, setLocation]);
+
+  // Main routing logic
+  return (
+    <Switch>
+      <Route path="/">
+        {isAuthenticated ? <FormPage onLogout={handleLogout} /> : <LoginPage onLoginSuccess={handleLogin} />}
+      </Route>
+      
+      <Route path="/form">
+        {isAuthenticated ? <FormPage onLogout={handleLogout} /> : <LoginPage onLoginSuccess={handleLogin} />}
+      </Route>
+      
+      <Route path="/admin-login">
+        {isAuthenticated ? <AdminLoginPage onAdminLoginSuccess={handleAdminLogin} /> : <LoginPage onLoginSuccess={handleLogin} />}
+      </Route>
+      
+      <Route path="/admin">
+        {isAuthenticated && user?.role === 'admin' ? 
+          <AdminPanel onLogout={handleLogout} /> : 
+          (isAuthenticated ? <AdminLoginPage onAdminLoginSuccess={handleAdminLogin} /> : <LoginPage onLoginSuccess={handleLogin} />)}
+      </Route>
+      
+      <Route>
+        <NotFoundPage />
+      </Route>
+    </Switch>
+  );
 }
 
 export default App;
